@@ -4,6 +4,7 @@ import cv2
 import json
 
 from src.service.qr_service import process_qr
+from src.log.logger import logger
 
 router = APIRouter()
 
@@ -13,16 +14,34 @@ async def read_qr_endpoint(
     file: UploadFile = File(...),
     boxes: str = Form(...)
 ):
-    contents = await file.read()
+    try:
+        contents = await file.read()
 
-    npimg = np.frombuffer(contents, np.uint8)
-    image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        logger.info("[START] read_qr_endpoint called")
 
-    boxes = json.loads(boxes)
+        npimg = np.frombuffer(contents, np.uint8)
+        image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-    results = process_qr(image, boxes)
+        if image is None:
+            raise ValueError("Invalid image received")
 
-    return {
-        "success": True,
-        "results": results
-    }
+        logger.info(f"[IMAGE] shape={image.shape}")
+
+        boxes = json.loads(boxes)
+        logger.info(f"[BOXES] count={len(boxes.get('boxes', []))}")
+
+        results = process_qr(image, boxes)
+
+        logger.info("[END] read_qr_endpoint finished successfully")
+
+        return {
+            "success": True,
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(f"[ERROR] error reading QR code: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }

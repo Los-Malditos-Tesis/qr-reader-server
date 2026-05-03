@@ -1,45 +1,88 @@
 import cv2
-from src.utils.image_utils import preprocess, resize_image
+import time
+from src.log.logger import logger
 
+# Detector global (reutilizable)
 detector = cv2.QRCodeDetector()
 
 
 def read_qr_opencv(image):
-    data, points, _ = detector.detectAndDecodeMulti(image)
+    try:
+        logger.info("[DETECT] detectAndDecodeMulti started")
 
-    results = []
+        retval, data, points,_ = detector.detectAndDecodeMulti(image)
 
-    if points is not None:
-        for text in data:
+        results = []
+
+        if data:
+            for text in data:
+                if text:
+                    results.append(text)
+                    logger.info(f"[QR] detected: {text}")
+
+        # fallback single QR
+        if not results:
+            text, _, _ = detector.detectAndDecode(image)
             if text:
                 results.append(text)
+                logger.info(f"[QR] fallback result: {text}")
 
-    # fallback a single
-    if not results:
-        text, _, _ = detector.detectAndDecode(image)
-        if text:
-            results.append(text)
+        logger.info("[END] read_qr_opencv finished successfully")
+        return results
 
-    return results
+    except Exception as e:
+        logger.error(f"[ERROR] error reading QR code: {str(e)}")
+        raise e
 
 
-def process_qr(image, boxes):
-    all_results = []
+def process_qr(image, data):
+    try:
+        results = []
+        boxes = data.get("boxes", [])
 
-    for box in boxes:
-        x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+        logger.info(f"[PROCESS] start process_qr with {len(boxes)} boxes")
 
-        roi = image[y:y + h, x:x + w]
+        h_img, w_img = image.shape[:2]
 
-        # mejora clave
-        roi = resize_image(roi)
-        processed = preprocess(roi)
+        for box in boxes:
+            x, y, w, h = box["x"], box["y"], box["w"], box["h"]
 
-        qr_data_list = read_qr_opencv(processed)
+            # safe crop bounds
+            x1 = max(0, int(x))
+            y1 = max(0, int(y))
+            x2 = min(w_img, int(x + w))
+            y2 = min(h_img, int(y + h))
 
-        all_results.append({
-            "box": box,
-            "data": qr_data_list
-        })
+            crop = image[y1:y2, x1:x2]
 
-    return all_results
+            if crop.size == 0:
+                logger.warning(f"[QR] empty crop for box {box}")
+                continue
+
+            qr_data, points, _= detector.detectAndDecode(crop)
+
+            ## si falla al recortar la imagen
+            if not qr_data:
+                qr_data = read_qr_opencv(image)
+            logger.info(f"[QR] detected: {qr_data}")
+
+            results.append({
+                "label": box.get("label"),
+                "x": x,
+                "y": y,
+                "qr_data": qr_data if qr_data else None
+            })
+
+            # DEBUG (opcional)
+            debug = image.copy()
+            cv2.rectangle(debug, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            filename = f"test/debug_box_{int(time.time() * 1000)}.jpg"
+            cv2.imwrite(filename, debug)
+
+        logger.info("[PROCESS] process_qr finished successfully")
+        return results
+
+    except Exception as e:
+        logger.error(f"[ERROR] error processing box: {str(e)}")
+        raise e
