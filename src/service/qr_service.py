@@ -1,88 +1,103 @@
 import cv2
-import time
+import numpy as np
+from pyzbar.pyzbar import decode
 from src.log.logger import logger
 
-# Detector global (reutilizable)
 detector = cv2.QRCodeDetector()
 
 
-def read_qr_opencv(image):
-    try:
-        logger.info("[DETECT] detectAndDecodeMulti started")
+def preprocess_image(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        retval, data, points,_ = detector.detectAndDecodeMulti(image)
+    # aumentar tamaño
+    gray = cv2.resize(
+        gray,
+        None,
+        fx=4,
+        fy=4,
+        interpolation=cv2.INTER_CUBIC
+    )
+
+    # CLAHE
+    clahe = cv2.createCLAHE(
+        clipLimit=2.0,
+        tileGridSize=(8, 8)
+    )
+
+    gray = clahe.apply(gray)
+
+    # mejorar contraste
+    gray = cv2.convertScaleAbs(
+        gray,
+        alpha=1.8,
+        beta=30
+    )
+
+    # blur suave
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+
+    # threshold adaptativo
+    thresh = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        5
+    )
+
+    return gray, thresh
+
+
+def extract_results(decoded, results):
+    for obj in decoded:
+        text = obj.data.decode("utf-8")
+
+        if text not in results:
+            logger.info(f"[QR] detected: {text}")
+            results.append(text)
+
+
+def read_multiple_qr(image):
+    try:
+        logger.info("[QR] starting detection")
+
+        gray, thresh = preprocess_image(image)
 
         results = []
 
-        if data:
-            for text in data:
-                if text:
-                    results.append(text)
-                    logger.info(f"[QR] detected: {text}")
+        # intento 1: imagen original
+        decoded = decode(image)
+        extract_results(decoded, results)
 
-        # fallback single QR
+        # intento 2: grayscale
         if not results:
-            text, _, _ = detector.detectAndDecode(image)
-            if text:
-                results.append(text)
-                logger.info(f"[QR] fallback result: {text}")
+            decoded = decode(gray)
+            extract_results(decoded, results)
 
-        logger.info("[END] read_qr_opencv finished successfully")
+        # intento 3: threshold
+        if not results:
+            decoded = decode(thresh)
+            extract_results(decoded, results)
+
+        # fallback OpenCV
+        if not results:
+            retval, data, points, _ = detector.detectAndDecodeMulti(thresh)
+
+            if retval and data:
+                for text in data:
+                    if text and text not in results:
+                        logger.info(f"[OpenCV QR] {text}")
+                        results.append(text)
+
+        # debug
+        cv2.imwrite("test/debug_gray.jpg", gray)
+        cv2.imwrite("test/debug_thresh.jpg", thresh)
+
+        logger.info(f"[QR] detected {len(results)} QR")
+
         return results
 
     except Exception as e:
-        logger.error(f"[ERROR] error reading QR code: {str(e)}")
-        raise e
-
-
-def process_qr(image, data):
-    try:
-        results = []
-        boxes = data.get("boxes", [])
-
-        logger.info(f"[PROCESS] start process_qr with {len(boxes)} boxes")
-
-        h_img, w_img = image.shape[:2]
-
-        for box in boxes:
-            x, y, w, h = box["x"], box["y"], box["w"], box["h"]
-
-            # safe crop bounds
-            x1 = max(0, int(x))
-            y1 = max(0, int(y))
-            x2 = min(w_img, int(x + w))
-            y2 = min(h_img, int(y + h))
-
-            crop = image[y1:y2, x1:x2]
-
-            if crop.size == 0:
-                logger.warning(f"[QR] empty crop for box {box}")
-                continue
-
-            qr_data, points, _= detector.detectAndDecode(crop)
-
-            ## si falla al recortar la imagen
-            if not qr_data:
-                qr_data = read_qr_opencv(image)
-            logger.info(f"[QR] detected: {qr_data}")
-
-            results.append({
-                "label": box.get("label"),
-                "x": x,
-                "y": y,
-                "qr_data": qr_data if qr_data else None
-            })
-
-            # DEBUG (opcional)
-            debug = image.copy()
-            cv2.rectangle(debug, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-            filename = f"test/debug_box_{int(time.time() * 1000)}.jpg"
-            cv2.imwrite(filename, debug)
-
-        logger.info("[PROCESS] process_qr finished successfully")
-        return results
-
-    except Exception as e:
-        logger.error(f"[ERROR] error processing box: {str(e)}")
-        raise e
+        logger.error(f"[ERROR] {str(e)}")
+        return []
