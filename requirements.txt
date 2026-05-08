@@ -4,5 +4,5 @@ opencv-python-headless
 numpy
 pyzbar
 python-multipart
-requests
+paho-mqtt
 python-dotenv
