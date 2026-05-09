@@ -1,28 +1,58 @@
-from fastapi import APIRouter, File, UploadFile, Form
+from fastapi import APIRouter, File, UploadFile, Form, BackgroundTasks
 import numpy as np
 import cv2
-import json
 
-from src.service.qr_service import process_qr
+from src.service.qr_service import read_multiple_qr
+from src.log.logger import logger
+from src.client.mqtt_client import mqtt_manager
+from src.config.setting import settings
 
 router = APIRouter()
 
 
 @router.post("/read-qr/")
 async def read_qr_endpoint(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    boxes: str = Form(...)
+    correlationId: str = Form(...),
+    cameraId: str = Form(...),
+    zoneId: str = Form(...),
 ):
-    contents = await file.read()
 
-    npimg = np.frombuffer(contents, np.uint8)
-    image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+    try:
+        contents = await file.read()
 
-    boxes = json.loads(boxes)
+        npimg = np.frombuffer(contents, np.uint8)
+        image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-    results = process_qr(image, boxes)
+        if image is None:
+            return {"success": False, "error": "Invalid image"}
 
-    return {
-        "success": True,
-        "results": results
-    }
+        results = read_multiple_qr(image)
+
+        payload = {
+            "correlationId": correlationId,
+            "cameraId": cameraId,
+            "zoneId": zoneId,
+            "results": results,
+            "found": len(results) > 0
+        }
+
+        # MQTT ASÍNCRONO (NO bloquea request)
+        background_tasks.add_task(
+            mqtt_manager.publish,
+            settings.MQTT_TOPIC_RESULT,
+            payload
+        )
+
+        return {
+            "success": True,
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(str(e))
+        return {
+            "success": False,
+            "error": str(e)
+        }

@@ -1,45 +1,298 @@
 import cv2
-from src.utils.image_utils import preprocess, resize_image
+import numpy as np
+from pyzbar.pyzbar import decode
+from src.log.logger import logger
+
+DEBUG = False
 
 detector = cv2.QRCodeDetector()
 
 
-def read_qr_opencv(image):
-    data, points, _ = detector.detectAndDecodeMulti(image)
+# =========================
+# WARP PERSPECTIVE
+# =========================
+def warp_qr(image, pts):
 
-    results = []
+    pts = np.array(pts, dtype="float32")
 
-    if points is not None:
-        for text in data:
-            if text:
+    width = 700
+    height = 700
+
+    dst = np.array([
+        [0, 0],
+        [width - 1, 0],
+        [width - 1, height - 1],
+        [0, height - 1]
+    ], dtype="float32")
+
+    matrix = cv2.getPerspectiveTransform(pts, dst)
+
+    warped = cv2.warpPerspective(
+        image,
+        matrix,
+        (width, height)
+    )
+
+    return warped
+
+
+# =========================
+# PREPROCESS
+# =========================
+def preprocess_image(image):
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # upscale agresivo
+    gray = cv2.resize(
+        gray,
+        None,
+        fx=4,
+        fy=4,
+        interpolation=cv2.INTER_LANCZOS4
+    )
+
+    # mejorar contraste
+    clahe = cv2.createCLAHE(
+        clipLimit=3.0,
+        tileGridSize=(8, 8)
+    )
+
+    gray = clahe.apply(gray)
+
+    # sharpen suave
+    kernel = np.array([
+        [0, -1, 0],
+        [-1, 5, -1],
+        [0, -1, 0]
+    ])
+
+    gray = cv2.filter2D(gray, -1, kernel)
+
+    # preservar bordes
+    gray = cv2.bilateralFilter(gray, 7, 50, 50)
+
+    # morphology close
+    morph_kernel = np.ones((2, 2), np.uint8)
+
+    gray = cv2.morphologyEx(
+        gray,
+        cv2.MORPH_CLOSE,
+        morph_kernel
+    )
+
+    # adaptive threshold
+    adaptive = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        3
+    )
+
+    return adaptive
+
+
+# =========================
+# TRY MULTIPLE DECODES
+# =========================
+def try_decode_all(image):
+
+    decoded = decode(image)
+
+    if decoded:
+        return decoded
+
+    rotations = [
+        cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE),
+        cv2.rotate(image, cv2.ROTATE_180),
+        cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    ]
+
+    for rotated in rotations:
+
+        decoded = decode(rotated)
+
+        if decoded:
+            return decoded
+
+    return []
+
+
+# =========================
+# EXTRACT RESULTS
+# =========================
+def extract_results(decoded, results):
+
+    for obj in decoded:
+
+        try:
+            text = obj.data.decode("utf-8").strip()
+
+            if text not in results:
+
+                logger.info(f"[QR DETECTED] {text}")
+
                 results.append(text)
 
-    # fallback a single
-    if not results:
-        text, _, _ = detector.detectAndDecode(image)
-        if text:
-            results.append(text)
-
-    return results
+        except Exception as e:
+            logger.error(f"[DECODE ERROR] {str(e)}")
 
 
-def process_qr(image, boxes):
-    all_results = []
+# =========================
+# FIND QR CANDIDATES
+# =========================
+def find_qr_candidates(image):
 
-    for box in boxes:
-        x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        roi = image[y:y + h, x:x + w]
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-        # mejora clave
-        roi = resize_image(roi)
-        processed = preprocess(roi)
+    thresh = cv2.adaptiveThreshold(
+        blur,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        5
+    )
 
-        qr_data_list = read_qr_opencv(processed)
+    contours, _ = cv2.findContours(
+        thresh,
+        cv2.RETR_LIST,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
 
-        all_results.append({
-            "box": box,
-            "data": qr_data_list
-        })
+    candidates = []
 
-    return all_results
+    for contour in contours:
+
+        area = cv2.contourArea(contour)
+
+        # ignorar pequeños
+        if area < 1000:
+            continue
+
+        perimeter = cv2.arcLength(contour, True)
+
+        approx = cv2.approxPolyDP(
+            contour,
+            0.04 * perimeter,
+            True
+        )
+
+        # buscar cuadrados
+        if len(approx) == 4:
+
+            pts = approx.reshape(4, 2)
+
+            candidates.append(pts)
+
+    return candidates
+
+
+# =========================
+# MAIN FUNCTION
+# =========================
+def read_multiple_qr(image):
+
+    try:
+
+        logger.info("[QR] STARTING DETECTION")
+
+        results = []
+
+        # ======================================
+        # FIRST PASS - OpenCV Multi
+        # ======================================
+
+        retval, decoded_info, points, _ = detector.detectAndDecodeMulti(image)
+
+        if retval and decoded_info:
+
+            logger.info(f"[OpenCV] detected: {len(decoded_info)}")
+
+            for text in decoded_info:
+
+                if text and text not in results:
+
+                    logger.info(f"[OpenCV QR] {text}")
+
+                    results.append(text)
+
+        # ======================================
+        # SECOND PASS - pyzbar global
+        # ======================================
+
+        decoded = try_decode_all(image)
+
+        extract_results(decoded, results)
+
+        # ======================================
+        # THIRD PASS - preprocess global
+        # ======================================
+
+        if len(results) < 3:
+
+            logger.info("[QR] preprocess global")
+
+            processed = preprocess_image(image)
+
+            decoded = try_decode_all(processed)
+
+            extract_results(decoded, results)
+
+            if DEBUG:
+                cv2.imwrite("/tmp/processed.jpg", processed)
+
+        # ======================================
+        # FOURTH PASS - contour detection
+        # ======================================
+
+        if len(results) < 3:
+
+            logger.info("[QR] contour scan")
+
+            candidates = find_qr_candidates(image)
+
+            logger.info(f"[QR] candidates: {len(candidates)}")
+
+            for i, pts in enumerate(candidates):
+
+                try:
+
+                    warped = warp_qr(image, pts)
+
+                    decoded = try_decode_all(warped)
+
+                    if not decoded:
+
+                        processed = preprocess_image(warped)
+
+                        decoded = try_decode_all(processed)
+
+                    extract_results(decoded, results)
+
+                    if DEBUG:
+
+                        cv2.imwrite(
+                            f"/tmp/qr_candidate_{i}.jpg",
+                            warped
+                        )
+
+                except Exception as contour_error:
+
+                    logger.error(
+                        f"[CONTOUR ERROR] {str(contour_error)}"
+                    )
+
+        logger.info(f"[QR] TOTAL DETECTED: {len(results)}")
+
+        return results
+
+    except Exception as e:
+
+        logger.error(f"[QR ERROR] {str(e)}")
+
+        return []
