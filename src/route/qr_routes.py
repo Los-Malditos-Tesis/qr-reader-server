@@ -18,6 +18,7 @@ async def read_qr_endpoint(
     cameraId: str = Form(...),
     zoneId: str = Form(...),
 ):
+
     try:
         contents = await file.read()
 
