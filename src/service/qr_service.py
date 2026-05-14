@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 from pyzbar.pyzbar import decode
 from src.log.logger import logger
-
-DEBUG = False
+from src.utils.utils import image_to_base64
+from src.config.setting import settings
 
 detector = cv2.QRCodeDetector()
 
@@ -200,7 +200,11 @@ def read_multiple_qr(image):
     try:
 
         logger.info("[QR] STARTING DETECTION")
+        if settings.DEVELOP_MODE == "DEBUG":
+            image64 = image_to_base64(image)
+            logger.info("[QR] Image (base64): " + image64)
 
+        results = []
         results = []
 
         # ======================================
@@ -243,9 +247,6 @@ def read_multiple_qr(image):
 
             extract_results(decoded, results)
 
-            if DEBUG:
-                cv2.imwrite("/tmp/processed.jpg", processed)
-
         # ======================================
         # FOURTH PASS - contour detection
         # ======================================
@@ -273,13 +274,6 @@ def read_multiple_qr(image):
                         decoded = try_decode_all(processed)
 
                     extract_results(decoded, results)
-
-                    if DEBUG:
-
-                        cv2.imwrite(
-                            f"/tmp/qr_candidate_{i}.jpg",
-                            warped
-                        )
 
                 except Exception as contour_error:
 
