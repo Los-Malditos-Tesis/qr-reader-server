@@ -15,8 +15,7 @@ async def read_qr_endpoint(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     correlationId: str = Form(...),
-    cameraId: str = Form(...),
-    zoneId: str = Form(...),
+    cameraCode: str = Form(...)
 ):
 
     try:
@@ -32,8 +31,7 @@ async def read_qr_endpoint(
 
         payload = {
             "correlationId": correlationId,
-            "cameraId": cameraId,
-            "zoneId": zoneId,
+            "cameraCode": cameraCode,
             "results": results,
             "found": len(results) > 0
         }
