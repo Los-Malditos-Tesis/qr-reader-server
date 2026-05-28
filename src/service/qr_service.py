@@ -202,6 +202,9 @@ def read_multiple_qr(image):
         logger.info("[QR] STARTING DETECTION")
         if settings.DEVELOP_MODE == "DEBUG":
             image64 = image_to_base64(image)
+            print("length:", len(base64_string))
+            print("start:", base64_string[:50])
+            print("end:", base64_string[-50:])
             logger.info("[QR] Image (base64): " + image64)
 
         results = []
