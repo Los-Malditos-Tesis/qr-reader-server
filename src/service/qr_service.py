@@ -205,7 +205,20 @@ def read_multiple_qr(image):
             print("length:", len(image64))
             print("start:", image64[:50])
             print("end:", image64[-50:])
-            logger.info("[QR] Image (base64): " + image64)
+            
+            # Calcular el tamaño para dividir en 3 partes
+            total_length = len(image64)
+            chunk_size = total_length // 3
+            
+            # Cortar la cadena en 3 bloques exactos
+            chunk1 = image64[:chunk_size]
+            chunk2 = image64[chunk_size:chunk_size*2]
+            chunk3 = image64[chunk_size*2:] # Toma el resto hasta el final
+            
+            # Imprimir los 3 bloques en el log
+            logger.info("[QR] Image PARTE 1/3: " + chunk1)
+            logger.info("[QR] Image PARTE 2/3: " + chunk2)
+            logger.info("[QR] Image PARTE 3/3: " + chunk3)
 
         results = []
         results = []
