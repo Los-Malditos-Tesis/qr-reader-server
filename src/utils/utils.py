@@ -12,7 +12,7 @@ cloudinary.config(
 )
 
 
-def upload_debug_image(image, folder="opencv-debug"):
+def upload_debug_image(image, folder="opencv-debug", correlationId = "", cameraCode = ""):
 
     path = "/tmp/debug_frame.jpg"
 
@@ -23,7 +23,8 @@ def upload_debug_image(image, folder="opencv-debug"):
 
     result = cloudinary.uploader.upload(
         path,
-        folder=folder
+        folder=folder,
+        public_id=f"{cameraCode}/{correlationId}",
     )
 
     return result.get("secure_url")

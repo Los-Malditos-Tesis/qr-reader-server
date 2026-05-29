@@ -195,13 +195,13 @@ def find_qr_candidates(image):
 # =========================
 # MAIN FUNCTION
 # =========================
-def read_multiple_qr(image):
+def read_multiple_qr(image, correlationId, cameraCode):
 
     try:
 
         logger.info("[QR] STARTING DETECTION")
         if settings.DEVELOP_MODE == "DEBUG":
-            image_url = upload_debug_image(image)
+            image_url = upload_debug_image(image,"opencv-debug", correlationId, cameraCode)
             logger.info(f"[QR] Debug image uploaded: {image_url}")
 
         results = []

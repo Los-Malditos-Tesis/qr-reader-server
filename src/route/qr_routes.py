@@ -27,7 +27,7 @@ async def read_qr_endpoint(
         if image is None:
             return {"success": False, "error": "Invalid image"}
 
-        results = read_multiple_qr(image)
+        results = read_multiple_qr(image,   correlationId, cameraCode)
 
         payload = {
             "correlationId": correlationId,
