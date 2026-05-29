@@ -2,12 +2,12 @@ import os
 import cv2
 import cloudinary
 import cloudinary.uploader
-import  src.config.setting as setting
+from  src.config.setting import settings
 
 cloudinary.config(
-    cloud_name=setting.settings.CLOUDINARY_CLOUD_NAME,
-    api_key=setting.settings.CLOUDINARY_API_KEY,
-    api_secret=setting.settings.CLOUDINARY_API_SECRET,
+    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+    api_key=settings.CLOUDINARY_API_KEY,
+    api_secret=settings.CLOUDINARY_API_SECRET,
     secure=True
 )
 

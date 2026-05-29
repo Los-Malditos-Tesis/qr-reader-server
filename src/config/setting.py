@@ -6,6 +6,7 @@ class Setting:
 
     MQTT_SERVICE_USERNAME = os.getenv("MQTT_SERVICE_USERNAME")
     MQTT_SERVICE_PASSWORD = os.getenv("MQTT_SERVICE_PASSWORD")
+    MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID")
 
     MQTT_TOPIC_RESULT = os.getenv("MQTT_TOPIC_RESULT")
     DEVELOP_MODE = os.getenv("DEVELOP_MODE")
