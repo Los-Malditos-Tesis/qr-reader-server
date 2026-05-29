@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from pyzbar.pyzbar import decode
 from src.log.logger import logger
-from src.utils.utils import image_to_base64
+from src.utils.utils import upload_debug_image
 from src.config.setting import settings
 
 detector = cv2.QRCodeDetector()
@@ -201,24 +201,8 @@ def read_multiple_qr(image):
 
         logger.info("[QR] STARTING DETECTION")
         if settings.DEVELOP_MODE == "DEBUG":
-            image64 = image_to_base64(image)
-            print("length:", len(image64))
-            print("start:", image64[:50])
-            print("end:", image64[-50:])
-            
-            # Calcular el tamaño para dividir en 3 partes
-            total_length = len(image64)
-            chunk_size = total_length // 3
-            
-            # Cortar la cadena en 3 bloques exactos
-            chunk1 = image64[:chunk_size]
-            chunk2 = image64[chunk_size:chunk_size*2]
-            chunk3 = image64[chunk_size*2:] # Toma el resto hasta el final
-            
-            # Imprimir los 3 bloques en el log
-            logger.info("[QR] Image PARTE 1/3: " + chunk1)
-            logger.info("[QR] Image PARTE 2/3: " + chunk2)
-            logger.info("[QR] Image PARTE 3/3: " + chunk3)
+            image_url = upload_debug_image(image)
+            logger.info(f"[QR] Debug image uploaded: {image_url}")
 
         results = []
         results = []

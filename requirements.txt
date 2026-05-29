@@ -6,3 +6,4 @@ pyzbar
 python-multipart
 paho-mqtt
 python-dotenv
+cloudinary

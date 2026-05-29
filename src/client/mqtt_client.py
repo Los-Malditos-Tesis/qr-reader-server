@@ -6,7 +6,7 @@ from src.log.logger import logger
 
 class MQTTClientManager:
     def __init__(self):
-        self.client = mqtt.Client(client_id="opencv-service")
+        self.client = mqtt.Client(client_id="opencv-service-local")
         self.connected = False
 
         self.client.on_connect = self.on_connect
